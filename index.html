@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>阿拉德战记 · 离线版</title>
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0d12">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="game">
+
+    <!-- 1. 场景立绘面板（城镇/战斗时动态切换） -->
+    <div class="panel hero-panel">
+        <img id="scene-img" src="img/town.jpg" alt="场景">
+        <div class="hero-name-tag" id="scene-tag">城镇 · 铁匠铺</div>
+    </div>
+
+    <!-- 2. 状态栏：显示等级、HP、MP、金币 -->
+    <div class="panel status-panel">
+        <div class="hero-info">
+            <span class="hero-name">鬼剑士</span>
+            <span class="hero-lv" id="lv">Lv.1</span>
+        </div>
+        <div class="bars">
+            <div class="bar hp-bar"><div id="hp-fill" style="width:100%"></div><span id="hp-text">100/100</span></div>
+            <div class="bar mp-bar"><div id="mp-fill" style="width:100%"></div><span id="mp-text">50/50</span></div>
+        </div>
+        <div class="gold">金币：<span id="gold">0</span></div>
+    </div>
+
+    <!-- 3. 主画面：显示剧情、战斗信息、怪物状态 -->
+    <div class="panel main-panel">
+        <div id="screen"></div>
+    </div>
+
+    <!-- 4. 操作面板：动态生成按钮（攻击、技能、逃跑等） -->
+    <div class="panel action-panel" id="actions"></div>
+
+    <!-- 5. 背包面板：显示掉落的装备 -->
+    <div class="panel bag-panel">
+        <div class="panel-title">背包</div>
+        <div id="bag"></div>
+    </div>
+
+</div>
+
+<!-- 数据模块 -->
+<script src="data/monsters.js"></script>
+<script src="data/equips.js"></script>
+<script src="data/skills.js"></script>
+<script src="data/dungeons.js"></script>
+<script src="data/save.js"></script>       <!-- ★ 新增这一行 -->
+
+<!-- 背景音乐与设置 -->
+<script src="bgm.js"></script>
+<script src="settings.js"></script>
+
+<!-- 游戏引擎 -->
+<script src="game.js"></script>
+
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+            console.log('Service Worker 注册成功:', reg.scope);
+        }).catch(function (err) {
+            console.warn('Service Worker 注册失败:', err);
+        });
+    });
+}
+</script>
+
+</body>
+</html>
