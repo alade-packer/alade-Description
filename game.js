@@ -1,15 +1,9 @@
 /* ==========================================
-   阿拉德战记 · 游戏引擎（第二阶段修复版）
+   阿拉德战记 · 游戏引擎（语音版）
    ————————————————————————————————————————
-   修复：
-   · 死亡螺旋（回城 30% HP，扣 20% 金币）
-   · 副本独立掉落池
-   · BOSS 概率 10% → 4%
-   · 银光落刃眩晕实现
-   · 背包可卖 / 丢
-   · 读档数值兜底
-   · 怪物图 SVG 占位
-   · 首次触摸唤醒 AudioContext
+   新增：
+   · playVoice() 播放语音
+   · 城镇“🎤 听 Teto 打招呼”按钮
    ========================================== */
 
 /* ---------- 全局状态 ---------- */
@@ -27,12 +21,24 @@ var S = {
     inBattle: false,
     monster: null,
     dungeon: "洛兰",
-    /* ★ 眩晕状态：记录被眩晕的怪物剩余回合 */
     monsterStunTurns: 0
 };
 
 /* ---------- 工具函数 ---------- */
 function $(id) { return document.getElementById(id); }
+
+/* ---------- 播放语音 ---------- */
+function playVoice(file) {
+    try {
+        var audio = new Audio(file);
+        audio.volume = 1.0;
+        audio.play().catch(function (e) {
+            console.warn('语音播放失败:', e);
+        });
+    } catch (e) {
+        console.warn('语音初始化失败:', e);
+    }
+}
 
 /* ---------- 怪物立绘映射表 ---------- */
 var MONSTER_IMG = {
@@ -54,7 +60,6 @@ var MONSTER_IMG = {
     "使徒·狄瑞吉":          "img/direjie.jpg"
 };
 
-/* ---------- SVG 占位图（没有怪物图时的兜底） ---------- */
 var PLACEHOLDER_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">' +
     '<rect width="800" height="400" fill="#0a0d14"/>' +
@@ -63,7 +68,6 @@ var PLACEHOLDER_SVG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
     '</svg>'
 );
 
-/* ---------- 获取怪物立绘（缺图回退到 SVG 占位） ---------- */
 function getMonsterImg(name) {
     return MONSTER_IMG[name] || PLACEHOLDER_SVG;
 }
@@ -126,7 +130,6 @@ function show(text, choices) {
         b.textContent = c.t;
         b.onclick = function (fn) {
             return function () {
-                /* ★ 首次点击唤醒音频 */
                 if (typeof BGM !== 'undefined' && BGM.unlock) BGM.unlock();
                 fn();
             };
@@ -161,6 +164,7 @@ function town() {
 
     choices.push({ t: '▶ 查看角色属性', a: showStats });
     choices.push({ t: '▶ 查看装备栏', a: showEquipment });
+    choices.push({ t: '🎤 听 Teto 打招呼', a: function () { playVoice('voice/teto_hello.wav'); } });
     choices.push({ t: '▶ ⚙ 设置', a: showSettings });
     choices.push({ t: '▶ 恢复 HP / MP（30 金币）', a: rest, disabled: S.gold < 30 });
 
@@ -320,8 +324,6 @@ function doLoad() {
     if (!result.ok) { alert(result.msg); showSavePanel(); return; }
 
     var d = result.data;
-
-    /* ★ 兜底：所有数值字段都给默认值 */
     S.lv       = (typeof d.lv === 'number') ? d.lv : 1;
     S.baseHp   = (typeof d.baseHp === 'number') ? d.baseHp : 100;
     S.baseMp   = (typeof d.baseMp === 'number') ? d.baseMp : 50;
@@ -371,7 +373,6 @@ function rest() {
    ========================================== */
 function enterDungeon() {
     var dungeonData = DUNGEONS[S.dungeon];
-    /* ★ BOSS 概率从 10% 降到 4% */
     var isBoss = Math.random() < 0.04;
     var mKey = isBoss
         ? dungeonData.boss
@@ -388,7 +389,7 @@ function enterDungeon() {
         dropRate: base.dropRate,
         isBoss: isBoss
     };
-    S.monsterStunTurns = 0;   /* ★ 重置眩晕回合 */
+    S.monsterStunTurns = 0;
     S.inBattle = true;
     renderBattle(isBoss ? '💀 【BOSS 出现！】' : '⚔️ 遭遇了敌人！');
 }
@@ -438,14 +439,12 @@ function playerAttack(skillIndex) {
         S.mp -= skill.cost;
         skillName = skill.name;
         dmg = skill.dmg + st.atk;
-        /* ★ 银光落刃的眩晕标记 */
         if (skill.stun) isStunSkill = true;
     }
 
     S.monster.hp -= dmg;
     log += '你使用了【' + skillName + '】，造成 ' + dmg + ' 点伤害。\n';
 
-    /* ★ 眩晕判定：20% 概率 */
     if (isStunSkill && Math.random() < 0.2) {
         S.monsterStunTurns = 1;
         log += '😵 【' + S.monster.name + '】被眩晕，下一回合无法行动！\n';
@@ -458,7 +457,6 @@ function playerAttack(skillIndex) {
         return;
     }
 
-    /* ★ 如果敌人被眩晕，跳过它的回合 */
     if (S.monsterStunTurns > 0) {
         S.monsterStunTurns--;
         log += '【' + S.monster.name + '】被眩晕，无法反击。\n';
@@ -469,7 +467,6 @@ function playerAttack(skillIndex) {
     }
 
     if (S.hp <= 0) {
-        /* ★ 修复死亡螺旋：HP 恢复 30% 最大，金币扣 20% */
         var st3 = curStats();
         S.hp = Math.max(1, Math.floor(st3.maxHp * 0.3));
         var lost = Math.floor(S.gold * 0.2);
@@ -498,7 +495,6 @@ function flee() {
         var monsterDmg = Math.max(1, S.monster.atk - st.def);
         S.hp -= monsterDmg;
         if (S.hp <= 0) {
-            /* ★ 修复死亡螺旋 */
             var st4 = curStats();
             S.hp = Math.max(1, Math.floor(st4.maxHp * 0.3));
             var lost2 = Math.floor(S.gold * 0.2);
@@ -524,7 +520,7 @@ function battleWin(log) {
 
     var lootText = '';
     if (Math.random() < m.dropRate) {
-        var eq = pickLoot(S.dungeon);   /* ★ 按副本掉落 */
+        var eq = pickLoot(S.dungeon);
         if (eq) {
             S.bag.push(eq);
             lootText = '\n🎁 掉落了【' + eq.name + '】（' + eq.slot + '）！点击背包即可装备。';
@@ -554,11 +550,8 @@ function battleWin(log) {
         ]);
 }
 
-/* ==========================================
-   ★ 按副本掉落装备
-   ========================================== */
+/* ---------- 按副本掉落装备 ---------- */
 function pickLoot(dungeonName) {
-    /* 先找副本的 loot 列表，找不到就默认洛兰 */
     var pool = [];
     if (typeof DUNGEON_LOOT !== 'undefined' && DUNGEON_LOOT[dungeonName]) {
         pool = DUNGEON_LOOT[dungeonName];
@@ -568,7 +561,6 @@ function pickLoot(dungeonName) {
 
     if (pool.length === 0) return null;
 
-    /* 从池子里挑一件装备，通过名字在 EQUIPS 里找 */
     var pickName = pool[Math.floor(Math.random() * pool.length)];
     for (var i = 0; i < EQUIPS.length; i++) {
         if (EQUIPS[i].name === pickName) return EQUIPS[i];
@@ -591,12 +583,9 @@ function equipItem(i) {
         [{ t: '◀ 返回城镇', a: town }]);
 }
 
-/* ==========================================
-   ★ 出售物品
-   ========================================== */
+/* ---------- 出售物品 ---------- */
 function sellItem(i) {
     var item = S.bag[i];
-    /* 稀有度决定售价 */
     var price = 10;
     if (item.rarity === 'rare') price = 30;
     if (item.rarity === 'epic') price = 100;
@@ -609,9 +598,7 @@ function sellItem(i) {
     show('出售了【' + item.name + '】！\n\n获得 ' + price + ' 金币。', [{ t: '◀ 返回城镇', a: town }]);
 }
 
-/* ==========================================
-   ★ 丢弃物品
-   ========================================== */
+/* ---------- 丢弃物品 ---------- */
 function dropItem(i) {
     var item = S.bag[i];
     if (!confirm('确定丢弃【' + item.name + '】？此操作不可恢复。')) return;
